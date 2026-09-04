@@ -1,0 +1,372 @@
+/* ---------- Tokens ---------- */
+:root {
+  --color-bg: #12160f;
+  --color-bg-soft: #181e13;
+  --color-panel: #1f2618;
+  --color-border: rgba(201, 168, 76, 0.16);
+  --color-text: #eee3c8;
+  --color-text-muted: #a6a087;
+  --color-gold: #c9a24c;
+  --color-gold-soft: #e4c876;
+  --color-done: #7c9a68;
+  --color-done-dim: #55603f;
+  --color-future: #4f5344;
+
+  --font-display: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Times New Roman', serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  --radius-lg: 20px;
+  --radius-sm: 10px;
+}
+
+/* ---------- Base ---------- */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(circle at 50% 0%, #1a2114 0%, var(--color-bg) 55%);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  padding: 24px 16px 64px;
+}
+
+.app {
+  max-width: 460px;
+  margin: 0 auto;
+}
+
+/* ---------- Header ---------- */
+.app-header {
+  text-align: center;
+  margin-bottom: 28px;
+}
+
+.title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.6rem;
+  letter-spacing: 0.04em;
+  color: var(--color-gold-soft);
+  margin: 0;
+}
+
+/* ---------- Hero stat ---------- */
+.stat-hero {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.stat-value {
+  font-family: var(--font-display);
+  font-size: 3rem;
+  line-height: 1;
+  margin: 0;
+  background: linear-gradient(180deg, var(--color-gold-soft), var(--color-gold));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.stat-value .unit {
+  font-size: 1.4rem;
+  margin-left: 6px;
+}
+
+.stat-sub {
+  margin: 4px 0 20px;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.progress-track {
+  width: 100%;
+  height: 10px;
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--color-done-dim), var(--color-gold));
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.progress-label {
+  margin: 10px 0 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+/* ---------- Location card ---------- */
+.location-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 22px 20px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  margin-bottom: 24px;
+}
+
+.location-label {
+  margin: 0 0 4px;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.location-name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  color: var(--color-text);
+}
+
+.location-distance {
+  margin: 6px 0 0;
+  font-size: 0.85rem;
+  color: var(--color-gold-soft);
+}
+
+.location-divider {
+  height: 1px;
+  background: var(--color-border);
+}
+
+/* ---------- Button ---------- */
+.add-button {
+  display: block;
+  width: 100%;
+  padding: 16px;
+  margin-bottom: 32px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-gold);
+  color: #211a0c;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(201, 162, 76, 0.25);
+}
+
+.add-button:hover {
+  background: var(--color-gold-soft);
+}
+
+.add-button:focus-visible {
+  outline: 2px solid var(--color-gold-soft);
+  outline-offset: 3px;
+}
+
+/* ---------- Journey map ---------- */
+.map-card {
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 18px;
+}
+
+#journeyMap {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.map-legend {
+  margin: 10px 0 0;
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.map-path-done {
+  fill: none;
+  stroke: var(--color-gold);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.map-path-remaining {
+  fill: none;
+  stroke: var(--color-future);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.map-node {
+  stroke-width: 0.6;
+}
+
+.map-node.done {
+  fill: var(--color-done);
+  stroke: var(--color-done);
+}
+
+.map-node.current {
+  fill: var(--color-gold);
+  stroke: var(--color-gold-soft);
+}
+
+.map-node.future {
+  fill: var(--color-bg-soft);
+  stroke: var(--color-future);
+}
+
+.map-icon-shire circle {
+  fill: var(--color-done-dim);
+  stroke: var(--color-gold-soft);
+  stroke-width: 0.5;
+}
+
+.map-icon-doom polygon {
+  fill: var(--color-panel);
+  stroke: var(--color-gold);
+  stroke-width: 0.6;
+}
+
+.map-icon-doom-glow {
+  fill: #e0672c;
+  opacity: 0.85;
+}
+
+.map-traveler {
+  fill: var(--color-gold-soft);
+  stroke: var(--color-bg);
+  stroke-width: 0.4;
+}
+
+.map-traveler-ring {
+  fill: none;
+  stroke: var(--color-gold-soft);
+  stroke-width: 0.4;
+  transform-origin: center;
+  animation: map-pulse 1.8s ease-out infinite;
+}
+
+@keyframes map-pulse {
+  0% {
+    r: 1.8;
+    opacity: 0.7;
+  }
+  100% {
+    r: 4.5;
+    opacity: 0;
+  }
+}
+
+/* ---------- Journey list ---------- */
+.section-title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.1rem;
+  letter-spacing: 0.04em;
+  color: var(--color-text);
+  margin: 0 0 12px;
+}
+
+.milestone-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.milestone-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 2px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.95rem;
+}
+
+.milestone-list .symbol {
+  width: 1.1em;
+  flex-shrink: 0;
+}
+
+.milestone-list li.done {
+  color: var(--color-text-muted);
+}
+
+.milestone-list li.done .symbol {
+  color: var(--color-done);
+}
+
+.milestone-list li.current {
+  color: var(--color-gold-soft);
+  font-weight: 600;
+}
+
+.milestone-list li.current .symbol {
+  color: var(--color-gold);
+}
+
+.milestone-list li.future {
+  color: var(--color-future);
+}
+
+.milestone-list li.future .symbol {
+  color: var(--color-future);
+}
+
+/* ---------- Responsive: tablet ---------- */
+@media (min-width: 640px) {
+  .app {
+    max-width: 600px;
+  }
+
+  .title {
+    font-size: 2rem;
+  }
+
+  .stat-value {
+    font-size: 3.6rem;
+  }
+
+  .location-card {
+    flex-direction: row;
+  }
+
+  .location-divider {
+    width: 1px;
+    height: auto;
+    align-self: stretch;
+  }
+
+  .location-block {
+    flex: 1;
+  }
+}
+
+/* ---------- Responsive: desktop ---------- */
+@media (min-width: 1024px) {
+  body {
+    padding-top: 56px;
+  }
+
+  .app {
+    max-width: 680px;
+  }
+
+  .stat-value {
+    font-size: 4.2rem;
+  }
+}
