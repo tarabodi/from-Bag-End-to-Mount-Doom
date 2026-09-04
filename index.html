@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Walk to Mordor</title>
+  <link rel="stylesheet" href="style.css">
+
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <meta name="theme-color" content="#12160f">
+</head>
+<body>
+
+  <div class="app">
+
+    <header class="app-header">
+      <h1 class="title">Walk to Mordor</h1>
+    </header>
+
+    <section class="stat-hero">
+      <p class="stat-value"><span id="currentDistance">0</span><span class="unit">km</span></p>
+      <p class="stat-sub">of 2,863 km</p>
+
+      <div class="progress-track">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <p class="progress-label"><span id="progressPercent">0</span>% of the journey</p>
+    </section>
+
+    <section class="location-card">
+      <div class="location-block">
+        <p class="location-label">Current location</p>
+        <p class="location-name" id="currentMilestone">-</p>
+      </div>
+
+      <div class="location-divider"></div>
+
+      <div class="location-block">
+        <p class="location-label">Next destination</p>
+        <p class="location-name" id="nextMilestone">-</p>
+        <p class="location-distance"><span id="kmToNext">-</span> km to go</p>
+      </div>
+    </section>
+
+    <button id="addDistanceButton" class="add-button">Add distance</button>
+
+    <section class="journey-section">
+      <h2 class="section-title">Your journey</h2>
+      <ul id="milestoneList" class="milestone-list"></ul>
+    </section>
+
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
