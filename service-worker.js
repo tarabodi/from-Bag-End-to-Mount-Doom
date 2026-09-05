@@ -1,6 +1,6 @@
 // Naam van de cache. Verhoog dit getal als je later bestanden aanpast
 // en wilt dat gebruikers de nieuwe versie krijgen.
-const CACHE_NAME = "walk-to-mordor-v1";
+const CACHE_NAME = "walk-to-mordor-v2";
 
 // Bestanden die de app nodig heeft om te werken
 const FILES_TO_CACHE = [
