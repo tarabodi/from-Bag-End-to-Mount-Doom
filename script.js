@@ -15,9 +15,11 @@ const kmToNextEl = document.getElementById("kmToNext");
 const milestoneListEl = document.getElementById("milestoneList");
 const journeyMapEl = document.getElementById("journeyMap");
 
-// Hoeveel kolommen de kaart gebruikt voor het slingerende pad.
-// 42 milestones / 6 kolommen = 7 nette rijen.
-const MAP_COLUMNS = 6;
+// Elementen voor de resetfunctie
+const resetButton = document.getElementById("resetButton");
+const resetModal = document.getElementById("resetModal");
+const cancelResetButton = document.getElementById("cancelResetButton");
+const confirmResetButton = document.getElementById("confirmResetButton");
 
 // Haal de opgeslagen afstand op uit localStorage.
 // Als er nog niets is opgeslagen, beginnen we bij 0.
@@ -109,33 +111,55 @@ function renderMilestoneList() {
   });
 }
 
-// Bereken voor elke milestone een (x, y)-positie op een slingerend pad,
-// puur op basis van hun volgorde in journey.json (geen tweede databron).
-function computeMilestonePositions() {
-  const cols = MAP_COLUMNS;
-  const rows = Math.ceil(milestones.length / cols);
+/* =========================================================
+   KAART (JOURNEY MAP)
+   De kaart is volledig zelf getekend met SVG-vormen (lijnen,
+   cirkels, driehoeken). Er wordt geen bestaande afbeelding of
+   kaart gebruikt - alleen wiskunde en de data uit journey.json.
+   ========================================================= */
 
-  const marginX = 10;
-  const marginY = 10;
-  const usableWidth = 100 - marginX * 2;
-  const colSpacing = cols > 1 ? usableWidth / (cols - 1) : 0;
-  const rowSpacing = 12;
-  const viewBoxHeight = marginY * 2 + (rows - 1) * rowSpacing;
+// Afmetingen van het SVG-tekengebied. De hoogte is groter dan
+// de breedte, zodat de reis als een verticale "banner" oogt.
+const MAP_VIEWBOX_WIDTH = 100;
+const MAP_VIEWBOX_HEIGHT = 140;
+const MAP_TOP_MARGIN = 10;
+const MAP_BOTTOM_MARGIN = 10;
 
-  const positions = milestones.map(function (milestone, index) {
-    const row = Math.floor(index / cols);
-    const colInRow = index % cols;
-    const isReversedRow = row % 2 === 1; // slingerend: om en om heen en terug
-    const col = isReversedRow ? (cols - 1 - colInRow) : colInRow;
+// Aantal steekproefpunten waarmee we het pad tekenen. Meer punten
+// = een vloeiendere lijn.
+const MAP_PATH_SAMPLES = 160;
 
-    return {
-      milestone: milestone,
-      x: marginX + col * colSpacing,
-      y: marginY + row * rowSpacing
-    };
-  });
+// Bereken de positie op het pad voor een gegeven voortgang "t"
+// (een getal tussen 0 en 1, waarbij 0 = Hobbiton en 1 = Mount Doom).
+// Dit is de ENIGE plek waar de vorm van het pad wordt bepaald; het
+// pad zelf, de milestones én de wandelaar gebruiken allemaal deze
+// functie, zodat alles altijd op precies dezelfde lijn ligt.
+function pathPosition(t) {
+  const clampedT = Math.max(0, Math.min(1, t));
+  const usableHeight = MAP_VIEWBOX_HEIGHT - MAP_TOP_MARGIN - MAP_BOTTOM_MARGIN;
+  const y = MAP_TOP_MARGIN + clampedT * usableHeight;
 
-  return { positions: positions, viewBoxHeight: viewBoxHeight };
+  // Twee sinusgolven van verschillende "golflengte" bij elkaar opgeteld
+  // geven een organischer, minder mechanisch pad dan één simpele zigzag.
+  const wiggle =
+    24 * Math.sin(clampedT * Math.PI * 2.3) +
+    9 * Math.sin(clampedT * Math.PI * 5.4 + 1.1);
+
+  let x = 50 + wiggle;
+  x = Math.max(14, Math.min(86, x)); // binnen de kaart houden
+
+  return { x: x, y: y };
+}
+
+// Neem MAP_PATH_SAMPLES punten langs het hele pad, van start tot einde.
+function samplePath() {
+  const points = [];
+  for (let i = 0; i <= MAP_PATH_SAMPLES; i++) {
+    const t = i / MAP_PATH_SAMPLES;
+    const position = pathPosition(t);
+    points.push({ t: t, x: position.x, y: position.y });
+  }
+  return points;
 }
 
 // Zet een lijst van {x, y}-punten om naar een SVG "points"-tekenreeks.
@@ -147,76 +171,168 @@ function toPointsString(points) {
     .join(" ");
 }
 
-// Teken de kaart opnieuw: het pad, de milestone-stippen en de
-// exacte positie van Frodo & Sam, gebaseerd op de huidige afstand.
+// Achtergrond van de kaart: een verticale kleurovergang van een
+// zacht groen (Hobbiton) naar een donkere, dreigende tint (Mordor).
+function buildMapBackgroundMarkup() {
+  return (
+    "<defs>" +
+    '<linearGradient id="mapTerrainGradient" x1="0" y1="0" x2="0" y2="1">' +
+    '<stop offset="0%" stop-color="#33461f"></stop>' +
+    '<stop offset="30%" stop-color="#3a3220"></stop>' +
+    '<stop offset="55%" stop-color="#2e2a24"></stop>' +
+    '<stop offset="78%" stop-color="#211c1a"></stop>' +
+    '<stop offset="100%" stop-color="#150d0c"></stop>' +
+    "</linearGradient>" +
+    "</defs>" +
+    '<rect x="0" y="0" width="' + MAP_VIEWBOX_WIDTH + '" height="' + MAP_VIEWBOX_HEIGHT +
+    '" rx="4" fill="url(#mapTerrainGradient)"></rect>'
+  );
+}
+
+// Kleine, zelfgetekende decoratie-vormen. Puur sfeer, geen data.
+function treeMarkup(x, y, scale) {
+  return (
+    '<g class="map-deco-tree" transform="translate(' + x + "," + y + ") scale(" + scale + ')">' +
+    '<polygon points="0,-4 -2.2,0 2.2,0"></polygon>' +
+    '<polygon points="0,-2.4 -1.6,1.4 1.6,1.4"></polygon>' +
+    '<rect x="-0.4" y="1.2" width="0.8" height="1.4"></rect>' +
+    "</g>"
+  );
+}
+
+function mountainMarkup(x, y, scale) {
+  return (
+    '<g class="map-deco-mountain" transform="translate(' + x + "," + y + ") scale(" + scale + ')">' +
+    '<polygon points="-5,3 -1,-4 2,0 5,3"></polygon>' +
+    '<polygon points="0,-4 3,3 -2,3"></polygon>' +
+    "</g>"
+  );
+}
+
+function riverMarkup(y, amplitude) {
+  let d = "M 0 " + y.toFixed(1);
+  for (let x = 4; x <= 100; x += 8) {
+    const wave = y + amplitude * Math.sin(x / 10);
+    d += " L " + x + " " + wave.toFixed(1);
+  }
+  return '<path class="map-deco-river" d="' + d + '"></path>';
+}
+
+function emberMarkup(x, y, radius) {
+  return '<circle class="map-deco-ember" cx="' + x + '" cy="' + y + '" r="' + radius + '"></circle>';
+}
+
+// Zet vaste, decoratieve landschapselementen neer: bomen bij het begin,
+// bergen halverwege, één rivier, en gloeiende vonken vlak voor Mordor.
+// Dit staat los van de milestone-data en verandert niet mee met de afstand.
+function buildTerrainMarkup() {
+  let markup = "";
+
+  [0.03, 0.06, 0.1].forEach(function (t, index) {
+    const point = pathPosition(t);
+    const side = index % 2 === 0 ? -10 : 10;
+    markup += treeMarkup(point.x + side, point.y - 2, 0.9);
+  });
+
+  [0.38, 0.46].forEach(function (t, index) {
+    const point = pathPosition(t);
+    const side = index % 2 === 0 ? 12 : -12;
+    markup += mountainMarkup(point.x + side, point.y, 1.1);
+  });
+
+  const riverPoint = pathPosition(0.58);
+  markup += riverMarkup(riverPoint.y, 2.5);
+
+  [0.88, 0.93, 0.97].forEach(function (t, index) {
+    const point = pathPosition(t);
+    const side = index % 2 === 0 ? 9 : -9;
+    markup += emberMarkup(point.x + side, point.y, 0.6);
+  });
+
+  return markup;
+}
+
+// Bouw de markering voor één milestone. Het "type"-veld uit journey.json
+// (major / special / final / normal) bepaalt vorm en grootte.
+function buildMilestoneNodeMarkup(milestone, status) {
+  const t = milestone.km / TOTAL_DISTANCE;
+  const point = pathPosition(t);
+  const title = "<title>" + milestone.name + " (" + milestone.km + " km)</title>";
+
+  if (milestone.type === "final") {
+    return (
+      '<g class="map-icon-doom ' + status + '" transform="translate(' + point.x + "," + point.y + ')">' +
+      '<polygon points="-4,4 0,-5 4,4"></polygon>' +
+      '<circle class="map-icon-doom-glow" cy="-1" r="1.1"></circle>' +
+      title +
+      "</g>"
+    );
+  }
+
+  if (milestone.type === "special") {
+    return (
+      '<rect class="map-node map-node-special ' + status + '" x="' + (point.x - 1.7) + '" y="' + (point.y - 1.7) +
+      '" width="3.4" height="3.4" transform="rotate(45 ' + point.x + " " + point.y + ')">' +
+      title +
+      "</rect>"
+    );
+  }
+
+  if (milestone.type === "major") {
+    return (
+      '<circle class="map-node map-node-major ' + status + '" cx="' + point.x + '" cy="' + point.y + '" r="2.6">' +
+      title +
+      "</circle>"
+    );
+  }
+
+  return (
+    '<circle class="map-node ' + status + '" cx="' + point.x + '" cy="' + point.y + '" r="1.5">' +
+    title +
+    "</circle>"
+  );
+}
+
+// Teken de kaart opnieuw: achtergrond, landschap, pad, milestones
+// en de exacte positie van Frodo & Sam, gebaseerd op totalWalked.
 function renderMap() {
   if (!journeyMapEl || milestones.length === 0) {
     return;
   }
 
-  const layout = computeMilestonePositions();
-  const positions = layout.positions;
-
-  journeyMapEl.setAttribute("viewBox", "0 0 100 " + layout.viewBoxHeight);
+  journeyMapEl.setAttribute("viewBox", "0 0 " + MAP_VIEWBOX_WIDTH + " " + MAP_VIEWBOX_HEIGHT);
 
   const current = getCurrentMilestone();
-  const next = getNextMilestone();
 
-  const currentIndex = milestones.findIndex(function (m) {
-    return m.id === current.id;
-  });
-  const nextIndex = next
-    ? milestones.findIndex(function (m) {
-        return m.id === next.id;
-      })
-    : -1;
+  // De voortgang van de wandelaars als getal tussen 0 en 1.
+  // Dit is dezelfde verhouding als het percentage, dus de kaart
+  // en het percentage lopen altijd exact gelijk op.
+  const travelerT = Math.max(0, Math.min(1, totalWalked / TOTAL_DISTANCE));
+  const travelerPoint = pathPosition(travelerT);
 
-  // De precieze positie van de wandelaars: geïnterpoleerd tussen de
-  // huidige en de volgende milestone, op basis van de gelopen km.
-  let travelerPoint = positions[currentIndex];
-
-  if (next) {
-    const from = positions[currentIndex];
-    const to = positions[nextIndex];
-    const segmentKm = next.km - current.km;
-    const rawProgress = segmentKm > 0 ? (totalWalked - current.km) / segmentKm : 0;
-    const progress = Math.max(0, Math.min(1, rawProgress));
-
-    travelerPoint = {
-      x: from.x + (to.x - from.x) * progress,
-      y: from.y + (to.y - from.y) * progress
-    };
-  }
-
-  const traveledPoints = positions.slice(0, currentIndex + 1).concat([travelerPoint]);
-  const remainingPoints = next
-    ? [travelerPoint].concat(positions.slice(nextIndex))
-    : [];
+  const allPoints = samplePath();
+  const traveledPoints = allPoints
+    .filter(function (point) {
+      return point.t <= travelerT;
+    })
+    .concat([travelerPoint]);
+  const remainingPoints = [travelerPoint].concat(
+    allPoints.filter(function (point) {
+      return point.t >= travelerT;
+    })
+  );
 
   let nodesMarkup = "";
-  positions.forEach(function (point) {
-    const status = getMilestoneStatus(point.milestone, current);
-    nodesMarkup +=
-      '<circle class="map-node ' + status + '" cx="' + point.x + '" cy="' + point.y + '" r="1.8">' +
-      "<title>" + point.milestone.name + " (" + point.milestone.km + " km)</title>" +
-      "</circle>";
+  milestones.forEach(function (milestone) {
+    const status = getMilestoneStatus(milestone, current);
+    nodesMarkup += buildMilestoneNodeMarkup(milestone, status);
   });
 
-  const startPoint = positions[0];
-  const endPoint = positions[positions.length - 1];
-
   journeyMapEl.innerHTML =
-    (remainingPoints.length
-      ? '<polyline class="map-path-remaining" points="' + toPointsString(remainingPoints) + '"></polyline>'
-      : "") +
+    buildMapBackgroundMarkup() +
+    buildTerrainMarkup() +
+    '<polyline class="map-path-remaining" points="' + toPointsString(remainingPoints) + '"></polyline>' +
     '<polyline class="map-path-done" points="' + toPointsString(traveledPoints) + '"></polyline>' +
-    '<g class="map-icon-shire" transform="translate(' + startPoint.x + "," + startPoint.y + ')">' +
-    '<circle r="2.6"></circle>' +
-    "</g>" +
-    '<g class="map-icon-doom" transform="translate(' + endPoint.x + "," + endPoint.y + ')">' +
-    '<polygon points="-3,3 0,-4 3,3"></polygon>' +
-    '<circle class="map-icon-doom-glow" cy="-1" r="0.9"></circle>' +
-    "</g>" +
     nodesMarkup +
     '<circle class="map-traveler-ring" cx="' + travelerPoint.x + '" cy="' + travelerPoint.y + '" r="1.8"></circle>' +
     '<circle class="map-traveler" cx="' + travelerPoint.x + '" cy="' + travelerPoint.y + '" r="1.6">' +
@@ -281,6 +397,30 @@ addDistanceButton.addEventListener("click", function () {
   } else {
     alert("Voer een geldig aantal kilometers in.");
   }
+});
+
+/* =========================================================
+   RESET PROGRESS
+   Wist alleen de opgeslagen afstand (STORAGE_KEY). journey.json,
+   de milestones en alle andere bestanden blijven onaangeroerd.
+   ========================================================= */
+
+// Toon de bevestigingsdialoog
+resetButton.addEventListener("click", function () {
+  resetModal.classList.remove("hidden");
+});
+
+// Annuleren: dialoog verbergen, er verandert niets
+cancelResetButton.addEventListener("click", function () {
+  resetModal.classList.add("hidden");
+});
+
+// Bevestigen: alleen totalWalked terugzetten naar 0 en opnieuw opslaan
+confirmResetButton.addEventListener("click", function () {
+  totalWalked = 0;
+  saveDistance();
+  updateDisplay();
+  resetModal.classList.add("hidden");
 });
 
 // We roepen updateDisplay() hier niet meteen aan voor de milestone-onderdelen,
