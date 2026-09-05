@@ -41,7 +41,7 @@ body {
 /* ---------- Header ---------- */
 .app-header {
   text-align: center;
-  margin-bottom: 28px;
+  margin-bottom: 16px;
 }
 
 .title {
@@ -51,6 +51,44 @@ body {
   letter-spacing: 0.04em;
   color: var(--color-gold-soft);
   margin: 0;
+}
+
+/* ---------- Tabs ---------- */
+.tab-bar {
+  display: flex;
+  gap: 6px;
+  background: var(--color-bg-soft);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 4px;
+  margin-bottom: 24px;
+}
+
+.tab-button {
+  flex: 1;
+  padding: 9px 10px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.tab-button.active {
+  background: var(--color-gold);
+  color: #211a0c;
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.active {
+  display: block;
 }
 
 /* ---------- Hero stat ---------- */
@@ -286,6 +324,95 @@ body {
   display: block;
   border-radius: 4px;
   overflow: hidden;
+  touch-action: none;
+  background: #10140c;
+}
+
+.map-viewport-wrapper {
+  position: relative;
+}
+
+.map-hint {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(8, 9, 6, 0.65);
+  color: var(--color-text);
+  font-size: 0.68rem;
+  white-space: nowrap;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.map-hint.hidden {
+  opacity: 0;
+}
+
+.map-zoom-controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.map-zoom-button {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: rgba(8, 9, 6, 0.7);
+  color: var(--color-gold-soft);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.map-zoom-button:active {
+  background: var(--color-gold);
+  color: #211a0c;
+}
+
+.map-zoom-reset {
+  font-size: 0.75rem;
+}
+
+/* Milestone-namen: alleen zichtbaar volgens de zoom-tier op #journeyMap */
+.map-label {
+  font-size: 2.6px;
+  fill: var(--color-text);
+  opacity: 0;
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: rgba(8, 9, 6, 0.75);
+  stroke-width: 0.5px;
+  transition: opacity 0.15s ease;
+}
+
+.map-label-major {
+  opacity: 1;
+  font-weight: 600;
+  fill: var(--color-gold-soft);
+}
+
+.map-region-label {
+  font-size: 3.4px;
+  letter-spacing: 0.06em;
+  fill: rgba(238, 227, 200, 0.55);
+  stroke: none;
+}
+
+#journeyMap.tier-1 .map-label-type-major {
+  opacity: 1;
+}
+
+#journeyMap.tier-2 .map-label {
+  opacity: 1;
 }
 
 .map-legend {
@@ -599,6 +726,13 @@ body {
 }
 
 /* ---------- Achievements ---------- */
+.achievement-summary {
+  margin: 0 0 14px;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
 .achievement-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

@@ -18,8 +18,38 @@ const kmToNextEl = document.getElementById("kmToNext");
 const milestoneListEl = document.getElementById("milestoneList");
 const journeyMapEl = document.getElementById("journeyMap");
 const mapTooltipEl = document.getElementById("mapTooltip");
+const mapHintEl = document.getElementById("mapHint");
+const mapZoomInButton = document.getElementById("mapZoomInButton");
+const mapZoomOutButton = document.getElementById("mapZoomOutButton");
+const mapZoomResetButton = document.getElementById("mapZoomResetButton");
 const achievementListEl = document.getElementById("achievementList");
+const achievementSummaryEl = document.getElementById("achievementSummary");
 const achievementToastEl = document.getElementById("achievementToast");
+
+// Tab-navigatie (Journey / Achievements)
+const journeyTabButton = document.getElementById("journeyTabButton");
+const achievementsTabButton = document.getElementById("achievementsTabButton");
+const journeyPanel = document.getElementById("journeyPanel");
+const achievementsPanel = document.getElementById("achievementsPanel");
+
+function activateTab(tabName) {
+  const isJourney = tabName === "journey";
+  journeyPanel.classList.toggle("active", isJourney);
+  achievementsPanel.classList.toggle("active", !isJourney);
+  journeyTabButton.classList.toggle("active", isJourney);
+  achievementsTabButton.classList.toggle("active", !isJourney);
+  journeyTabButton.setAttribute("aria-selected", isJourney ? "true" : "false");
+  achievementsTabButton.setAttribute("aria-selected", isJourney ? "false" : "true");
+}
+
+if (journeyTabButton && achievementsTabButton) {
+  journeyTabButton.addEventListener("click", function () {
+    activateTab("journey");
+  });
+  achievementsTabButton.addEventListener("click", function () {
+    activateTab("achievements");
+  });
+}
 
 // Elementen voor de resetfunctie
 const resetButton = document.getElementById("resetButton");
@@ -136,44 +166,53 @@ function renderMilestoneList() {
 }
 
 /* =========================================================
-   KAART (JOURNEY MAP V2)
-   De kaart is volledig zelf getekend met SVG-vormen. Er wordt
-   geen bestaande Midden-aarde-kaart, afbeelding of overtrekking
-   gebruikt - alleen wiskunde, en de data uit journey.json bepaalt
-   waar elke milestone op het zelfgetekende pad ligt.
+   KAART (JOURNEY MAP V3)
+   Volledig zelf getekend met SVG-vormen. Geen bestaande
+   Midden-aarde-kaart, afbeelding of overtrekking - alleen
+   wiskunde. journey.json bepaalt waar elke milestone ligt;
+   regio's/decoraties zijn puur visuele laag daaromheen.
    ========================================================= */
 
 const MAP_VIEWBOX_WIDTH = 100;
-const MAP_VIEWBOX_HEIGHT = 150;
+const MAP_VIEWBOX_HEIGHT = 115;
 const MAP_TOP_MARGIN = 10;
 const MAP_BOTTOM_MARGIN = 10;
 const MAP_PATH_SAMPLES = 180;
 
+// Zoom/pan-status van de kaart (puur weergave, geen appdata).
+let mapScale = 1;
+let mapTranslateX = 0;
+let mapTranslateY = 0;
+const MAP_MIN_SCALE = 1;
+const MAP_MAX_SCALE = 6;
+const MAP_ZOOM_TIER_1 = 2;
+const MAP_ZOOM_TIER_2 = 3.6;
+
 // Namen van "ankerpunten" die de globale vorm van de route bepalen,
 // plus een zelfgekozen x-positie (puur esthetisch, geen afstandsdata).
-// De eerste en laatste ("null") zijn respectievelijk Hobbiton en Mount Doom.
-// Dit geeft de route een herkenbare geografische opbouw: de Gouw in het
-// westen, Rivendel/de Nevelbergen als barrière, Lothlórien erachter,
-// de Anduin naar het zuiden, en tenslotte Mordor.
+// Dit geeft de route een herkenbare geografische opbouw: de Gouw in
+// het noordwesten, Bree/Weathertop/Rivendel oostwaarts, de Nevelbergen
+// als barrière, Moria erin, Lothlórien erachter, de Anduin zuidwaarts,
+// en tenslotte Mordor.
 const MAP_ROUTE_ANCHOR_DEFS = [
-  { name: null, x: 28 },
-  { name: "Bucklebury Ferry", x: 34 },
-  { name: "Bree", x: 46 },
-  { name: "Weathertop", x: 57 },
-  { name: "Rivendell", x: 66 },
-  { name: "Redhorn Pass / Caradhras", x: 49 },
-  { name: "West Gate of Moria", x: 44 },
-  { name: "Bridge of Khazad-dûm", x: 41 },
-  { name: "Dimrill Dale", x: 47 },
-  { name: "Lothlórien", x: 63 },
-  { name: "River Anduin", x: 55 },
-  { name: "Amon Hen / Parth Galen", x: 50 },
+  { name: null, x: 24 },
+  { name: "Bucklebury Ferry", x: 30 },
+  { name: "Bree", x: 42 },
+  { name: "Weathertop", x: 55 },
+  { name: "Rivendell", x: 68 },
+  { name: "Redhorn Pass / Caradhras", x: 50 },
+  { name: "West Gate of Moria", x: 43 },
+  { name: "Bridge of Khazad-dûm", x: 39 },
+  { name: "Dimrill Dale", x: 46 },
+  { name: "Lothlórien", x: 66 },
+  { name: "River Anduin", x: 58 },
+  { name: "Amon Hen / Parth Galen", x: 52 },
   { name: "Emyn Muil", x: 44 },
-  { name: "Dead Marshes", x: 38 },
-  { name: "Black Gate / Morannon", x: 33 },
+  { name: "Dead Marshes", x: 36 },
+  { name: "Black Gate / Morannon", x: 30 },
   { name: "Ithilien", x: 40 },
-  { name: "Minas Morgul", x: 52 },
-  { name: "Shelob's Lair", x: 56 },
+  { name: "Minas Morgul", x: 55 },
+  { name: "Shelob's Lair", x: 58 },
   { name: null, x: 50 }
 ];
 
@@ -197,31 +236,48 @@ function buildMapRouteAnchors() {
 }
 
 // Zoek de "t" (voortgang 0-1) van een milestone op basis van zijn naam.
-// Gebruikt voor het plaatsen van decoraties per landschapszone.
+// Gebruikt voor het plaatsen van regio's/decoraties, nooit voor afstanden.
 function milestoneT(name) {
   const milestone = findMilestoneByName(name);
   return milestone ? milestone.km / TOTAL_DISTANCE : 0;
 }
 
-// De horizontale positie van de grote, bewuste route-vorm (zonder de
-// kleine organische "trilling" die er later overheen komt).
+// Catmull-Rom spline: geeft een vloeiende curve door alle ankerpunten
+// (in tegenstelling tot rechte lijnstukken tussen punten).
+function catmullRom(p0, p1, p2, p3, t) {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  return 0.5 * (
+    2 * p1 +
+    (-p0 + p2) * t +
+    (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
+    (-p0 + 3 * p1 - 3 * p2 + p3) * t3
+  );
+}
+
+// De horizontale positie van de grote, bewuste route-vorm (vloeiend
+// geïnterpoleerd), zonder de kleine organische "trilling" erbovenop.
 function macroX(t) {
   const anchors = mapRouteAnchors;
-  if (anchors.length === 0) {
+  if (anchors.length < 2) {
     return 50;
   }
 
-  for (let i = 0; i < anchors.length - 1; i++) {
-    const a = anchors[i];
-    const b = anchors[i + 1];
-    if (t >= a.t && t <= b.t) {
-      const span = b.t - a.t;
-      const localT = span > 0 ? (t - a.t) / span : 0;
-      return a.x + (b.x - a.x) * localT;
+  let i = 0;
+  for (; i < anchors.length - 2; i++) {
+    if (t <= anchors[i + 1].t) {
+      break;
     }
   }
 
-  return anchors[anchors.length - 1].x;
+  const p0 = anchors[Math.max(0, i - 1)];
+  const p1 = anchors[i];
+  const p2 = anchors[Math.min(anchors.length - 1, i + 1)];
+  const p3 = anchors[Math.min(anchors.length - 1, i + 2)];
+  const span = p2.t - p1.t;
+  const localT = span > 0 ? (t - p1.t) / span : 0;
+
+  return catmullRom(p0.x, p1.x, p2.x, p3.x, localT);
 }
 
 // Bereken de positie op het pad voor een gegeven voortgang "t"
@@ -233,12 +289,12 @@ function pathPosition(t) {
   const usableHeight = MAP_VIEWBOX_HEIGHT - MAP_TOP_MARGIN - MAP_BOTTOM_MARGIN;
   const y = MAP_TOP_MARGIN + clampedT * usableHeight;
 
-  // Een kleine, hoogfrequente trilling bovenop de grote route-vorm
+  // Een kleine, hoogfrequente trilling bovenop de vloeiende route-vorm
   // zorgt voor een organischer, minder "getekend" pad.
-  const wiggle = 5 * Math.sin(clampedT * Math.PI * 9 + 0.6);
+  const wiggle = 3.5 * Math.sin(clampedT * Math.PI * 11 + 0.6);
 
   let x = macroX(clampedT) + wiggle;
-  x = Math.max(10, Math.min(90, x));
+  x = Math.max(8, Math.min(92, x));
 
   return { x: x, y: y };
 }
@@ -261,29 +317,79 @@ function toPointsString(points) {
     .join(" ");
 }
 
-// Achtergrond: een verticale kleurovergang die de reis door
-// verschillende sferen laat lopen, van de Gouw tot Mordor.
+// Y-coördinaat voor een gegeven t, los van x - gebruikt om regio's
+// (landschapsbanden) even hoog te laten beginnen/eindigen als de route.
+function yForT(t) {
+  return pathPosition(t).y;
+}
+
+/* ---- Regio's: eigen landschapsvlakken met een golvende rand,
+   zodat het geen strakke horizontale kleurbalken worden. ---- */
+
+const MAP_REGION_DEFS = [
+  { name: "The Shire", fromKm: 0, toKm: 185.1, top: "#3c5326", bottom: "#334a1f" },
+  { name: "Eriador", fromKm: 185.1, toKm: 386.2, top: "#46431f", bottom: "#3a3220" },
+  { name: "Road to Rivendell", fromKm: 386.2, toKm: 737.1, top: "#3a3a28", bottom: "#333a2a" },
+  { name: "Misty Mountains", fromKm: 737.1, toKm: 1207.0, top: "#43464a", bottom: "#33363a" },
+  { name: "Moria", fromKm: 1207.0, toKm: 1367.9, top: "#201f22", bottom: "#151417" },
+  { name: "Lothlórien", fromKm: 1367.9, toKm: 1512.8, top: "#4a4420", bottom: "#3d3a1c" },
+  { name: "Anduin", fromKm: 1512.8, toKm: 1643.1, top: "#28383e", bottom: "#1f2e33" },
+  { name: "Emyn Muil & the Marshes", fromKm: 1643.1, toKm: 1947.3, top: "#33352a", bottom: "#2a2b22" },
+  { name: "Approach to Mordor", fromKm: 1947.3, toKm: 2550.9, top: "#3a2e22", bottom: "#2a2018" },
+  { name: "Cirith Ungol", fromKm: 2550.9, toKm: 2639.3, top: "#221a1c", bottom: "#170e10" },
+  { name: "Mordor", fromKm: 2639.3, toKm: 2863, top: "#1c0f0c", bottom: "#0f0605" }
+];
+
+// Bouw één golvend landschapsvlak tussen twee t-waarden.
+function regionBandMarkup(region, index) {
+  const fromT = region.fromKm / TOTAL_DISTANCE;
+  const toT = region.toKm / TOTAL_DISTANCE;
+  const yFrom = yForT(fromT);
+  const yTo = yForT(toT);
+  const steps = 8;
+  const amplitude = 2.4;
+
+  let d = "M 0 " + (yFrom + amplitude * Math.sin(index)).toFixed(1);
+  for (let i = 1; i <= steps; i++) {
+    const x = (i / steps) * MAP_VIEWBOX_WIDTH;
+    const wave = amplitude * Math.sin(i * 1.3 + index * 2.1);
+    d += " L " + x.toFixed(1) + " " + (yFrom + wave).toFixed(1);
+  }
+  d += " L " + MAP_VIEWBOX_WIDTH + " " + yTo.toFixed(1);
+  for (let i = steps; i >= 0; i--) {
+    const x = (i / steps) * MAP_VIEWBOX_WIDTH;
+    const wave = amplitude * Math.sin(i * 1.1 + index * 3.4 + 1.5);
+    d += " L " + x.toFixed(1) + " " + (yTo + wave).toFixed(1);
+  }
+  d += " Z";
+
+  const gradId = "regionGrad" + index;
+  const defs =
+    '<linearGradient id="' + gradId + '" x1="0" y1="0" x2="0" y2="1">' +
+    '<stop offset="0%" stop-color="' + region.top + '"></stop>' +
+    '<stop offset="100%" stop-color="' + region.bottom + '"></stop>' +
+    "</linearGradient>";
+
+  const rect = '<path d="' + d + '" fill="url(#' + gradId + ')"></path>';
+
+  return { defs: defs, shape: rect };
+}
+
+// Bouw de volledige achtergrond: alle regio's na elkaar, plus een
+// vaste tekstlabel voor Moria (een gebied, geen losse milestone).
 function buildMapBackgroundMarkup() {
-  return (
-    "<defs>" +
-    '<linearGradient id="mapTerrainGradient" x1="0" y1="0" x2="0" y2="1">' +
-    '<stop offset="0%" stop-color="#33461f"></stop>' +
-    '<stop offset="10%" stop-color="#394a20"></stop>' +
-    '<stop offset="20%" stop-color="#3c4022"></stop>' +
-    '<stop offset="30%" stop-color="#393a2a"></stop>' +
-    '<stop offset="40%" stop-color="#33383c"></stop>' +
-    '<stop offset="46%" stop-color="#232227"></stop>' +
-    '<stop offset="53%" stop-color="#3d4425"></stop>' +
-    '<stop offset="60%" stop-color="#2f3a2e"></stop>' +
-    '<stop offset="70%" stop-color="#33302a"></stop>' +
-    '<stop offset="80%" stop-color="#2a211d"></stop>' +
-    '<stop offset="90%" stop-color="#1d1512"></stop>' +
-    '<stop offset="100%" stop-color="#150d0c"></stop>' +
-    "</linearGradient>" +
-    "</defs>" +
-    '<rect x="0" y="0" width="' + MAP_VIEWBOX_WIDTH + '" height="' + MAP_VIEWBOX_HEIGHT +
-    '" rx="4" fill="url(#mapTerrainGradient)"></rect>'
-  );
+  let defs = "<defs>";
+  let shapes = "";
+
+  MAP_REGION_DEFS.forEach(function (region, index) {
+    const band = regionBandMarkup(region, index);
+    defs += band.defs;
+    shapes += band.shape;
+  });
+
+  defs += "</defs>";
+
+  return defs + shapes;
 }
 
 // ---- Kleine, zelfgetekende decoratievormen (puur sfeer, geen data) ----
@@ -308,7 +414,6 @@ function mountainMarkup(x, y, scale) {
   );
 }
 
-// Een donkere, gewelfde poort: de ingang van Moria.
 function moriaGateMarkup(x, y) {
   return (
     '<g class="map-deco-moria" transform="translate(' + x + "," + y + ')">' +
@@ -318,21 +423,19 @@ function moriaGateMarkup(x, y) {
   );
 }
 
-// Een rivier die een stuk van het pad volgt (met een zijdelingse offset,
-// zodat hij niet precies over de gouden route heen valt).
 function riverAlongPathMarkup(startT, endT) {
   if (!(endT > startT)) {
     return "";
   }
 
   let d = "";
-  const steps = 16;
+  const steps = 18;
 
   for (let i = 0; i <= steps; i++) {
     const t = startT + (endT - startT) * (i / steps);
     const point = pathPosition(t);
-    const offset = 6 * Math.sin(i / 2);
-    const x = point.x + 8 + offset;
+    const offset = 7 * Math.sin(i / 2);
+    const x = point.x + 9 + offset;
     const command = i === 0 ? "M" : "L";
     d += command + " " + x.toFixed(1) + " " + point.y.toFixed(1) + " ";
   }
@@ -348,7 +451,6 @@ function rockMarkup(x, y, scale) {
   );
 }
 
-// Een eenvoudige, abstracte torensilhouet - geen bestaand ontwerp nagetekend.
 function towerMarkup(x, y) {
   return (
     '<g class="map-deco-tower" transform="translate(' + x + "," + y + ')">' +
@@ -362,9 +464,17 @@ function emberMarkup(x, y, radius) {
   return '<circle class="map-deco-ember" cx="' + x + '" cy="' + y + '" r="' + radius + '"></circle>';
 }
 
-// Zet alle landschapsdecoraties per zone neer. De zonegrenzen worden
-// opgezocht via milestone-namen (dus nog steeds journey.json als bron),
-// maar de decoraties zelf horen bij geen enkele specifieke milestone.
+// Een vast tekstlabel voor een REGIO (geen milestone, geen tik-doel).
+// Alleen gebruikt voor "Moria", zoals gevraagd: het gebied heet Moria,
+// de losse milestones (West Gate, Chamber of Mazarbul, Bridge of
+// Khazad-dûm) blijven de echte, tikbare punten uit journey.json.
+function regionLabelMarkup(text, x, y) {
+  return (
+    '<text class="map-label map-label-major map-region-label" x="' + x + '" y="' + y +
+    '" text-anchor="middle">' + text + "</text>"
+  );
+}
+
 function buildTerrainMarkup() {
   if (milestones.length === 0) {
     return "";
@@ -386,37 +496,38 @@ function buildTerrainMarkup() {
   [0.02, 0.045, 0.07].forEach(function (t, index) {
     if (t < breeT) {
       const point = pathPosition(t);
-      const side = index % 2 === 0 ? -11 : 11;
+      const side = index % 2 === 0 ? -12 : 12;
       markup += treeMarkup(point.x + side, point.y - 2, 0.85, "green");
     }
   });
 
-  // Nevelbergen: bergcluster bij de aanloop naar Rivendel/Moria
-  [rivendellT + 0.02, rivendellT + 0.05, moriaStartT - 0.015].forEach(function (t, index) {
+  // Nevelbergen: bergketen bij de aanloop naar Rivendel/Moria
+  [rivendellT + 0.015, rivendellT + 0.045, moriaStartT - 0.02, moriaStartT - 0.05].forEach(function (t, index) {
     const point = pathPosition(t);
-    const side = index % 2 === 0 ? 13 : -13;
+    const side = index % 2 === 0 ? 14 : -14;
     markup += mountainMarkup(point.x + side, point.y, 1.15);
   });
 
-  // Moria: een donkere poort tussen de westpoort en Dimrill Dale
+  // Moria: donkere poort + gebiedslabel
   const moriaMidT = (moriaStartT + moriaEndT) / 2;
   const moriaPoint = pathPosition(moriaMidT);
   markup += moriaGateMarkup(moriaPoint.x, moriaPoint.y);
+  markup += regionLabelMarkup("MORIA", moriaPoint.x, moriaPoint.y - 7);
 
   // Lothlórien: goud-getinte bomen rond het bosgebied
-  [lothlorienT - 0.015, lothlorienT + 0.01, lothlorienT + 0.03].forEach(function (t, index) {
+  [lothlorienT - 0.015, lothlorienT + 0.01, lothlorienT + 0.03, lothlorienT + 0.045].forEach(function (t, index) {
     const point = pathPosition(t);
-    const side = index % 2 === 0 ? -10 : 10;
+    const side = index % 2 === 0 ? -11 : 11;
     markup += treeMarkup(point.x + side, point.y - 1.5, 0.9, "gold");
   });
 
-  // De Anduin: een rivier die het pad een stuk volgt
+  // De Anduin: een kronkelende rivier die het pad een stuk volgt
   markup += riverAlongPathMarkup(anduinT, emynMuilT);
 
-  // Rotsachtig gebied richting Mordor
-  [blackGateT + 0.03, blackGateT + 0.08, minasMorgulT - 0.02].forEach(function (t, index) {
+  // Rotsachtig, drogend gebied richting Mordor
+  [blackGateT + 0.03, blackGateT + 0.08, minasMorgulT - 0.02, minasMorgulT + 0.03].forEach(function (t, index) {
     const point = pathPosition(t);
-    const side = index % 2 === 0 ? 12 : -12;
+    const side = index % 2 === 0 ? 13 : -13;
     markup += rockMarkup(point.x + side, point.y, 1);
   });
 
@@ -434,9 +545,27 @@ function buildTerrainMarkup() {
   return markup;
 }
 
-// Bouw de markering voor één milestone, inclusief een iets grotere
-// onzichtbare "tik-zone" zodat hij op een telefoon makkelijk te raken is.
-// Het "type"-veld uit journey.json bepaalt vorm en grootte.
+/* ---- Zoom-afhankelijke milestone-namen ----
+   Deze 9 namen (+ het "MORIA"-gebiedslabel hierboven) zijn altijd
+   zichtbaar, ook uitgezoomd. Overige "major"-milestones verschijnen
+   bij gemiddeld inzoomen; alle 42 pas bij maximaal inzoomen.
+   Dit is puur een presentatiekeuze - de namen komen nog steeds
+   allemaal uit journey.json, er is geen tweede lijst met namen. */
+const MAP_ALWAYS_VISIBLE_NAMES = [
+  "Hobbiton / Bag End",
+  "Bree",
+  "Weathertop",
+  "Rivendell",
+  "Lothlórien",
+  "Amon Hen / Parth Galen",
+  "Black Gate / Morannon",
+  "Minas Morgul",
+  "Mount Doom"
+];
+
+// Bouw de markering + het naamlabel voor één milestone. Het "type"-veld
+// uit journey.json bepaalt vorm/grootte; de naam-zichtbaarheid wordt
+// via CSS-klassen geregeld (zie #journeyMap.tier-1 / .tier-2 in style.css).
 function buildMilestoneNodeMarkup(milestone, status) {
   const t = milestone.km / TOTAL_DISTANCE;
   const point = pathPosition(t);
@@ -444,39 +573,50 @@ function buildMilestoneNodeMarkup(milestone, status) {
   const hitArea =
     '<circle class="map-node-hitarea" ' + idAttr + ' cx="' + point.x + '" cy="' + point.y + '" r="4.2"></circle>';
 
+  let shapeMarkup;
+
   if (milestone.type === "final") {
-    return (
-      hitArea +
+    shapeMarkup =
       '<g class="map-icon-doom ' + status + '" ' + idAttr + ' transform="translate(' + point.x + "," + point.y + ')">' +
       '<polygon points="-4,4 0,-5 4,4"></polygon>' +
       '<circle class="map-icon-doom-glow" cy="-1" r="1.1"></circle>' +
-      "</g>"
-    );
-  }
-
-  if (milestone.type === "special") {
-    return (
-      hitArea +
+      "</g>";
+  } else if (milestone.type === "special") {
+    shapeMarkup =
       '<rect class="map-node map-node-special ' + status + '" ' + idAttr + ' x="' + (point.x - 1.7) + '" y="' + (point.y - 1.7) +
-      '" width="3.4" height="3.4" transform="rotate(45 ' + point.x + " " + point.y + ')"></rect>'
-    );
+      '" width="3.4" height="3.4" transform="rotate(45 ' + point.x + " " + point.y + ')"></rect>';
+  } else if (milestone.type === "major") {
+    shapeMarkup =
+      '<circle class="map-node map-node-major ' + status + '" ' + idAttr + ' cx="' + point.x + '" cy="' + point.y + '" r="2.6"></circle>';
+  } else {
+    shapeMarkup =
+      '<circle class="map-node ' + status + '" ' + idAttr + ' cx="' + point.x + '" cy="' + point.y + '" r="1.5"></circle>';
   }
 
-  if (milestone.type === "major") {
-    return (
-      hitArea +
-      '<circle class="map-node map-node-major ' + status + '" ' + idAttr + ' cx="' + point.x + '" cy="' + point.y + '" r="2.6"></circle>'
-    );
+  // Labelzichtbaarheid: altijd zichtbaar / vanaf tier 1 / vanaf tier 2.
+  let labelClass = "map-label";
+  if (MAP_ALWAYS_VISIBLE_NAMES.indexOf(milestone.name) !== -1) {
+    labelClass += " map-label-major";
+  } else if (milestone.type === "major") {
+    labelClass += " map-label-type-major";
   }
 
-  return (
-    hitArea +
-    '<circle class="map-node ' + status + '" ' + idAttr + ' cx="' + point.x + '" cy="' + point.y + '" r="1.5"></circle>'
-  );
+  const labelSide = point.x > 50 ? -1 : 1;
+  const labelX = point.x + labelSide * 3.2;
+  const labelY = point.y + 1;
+  const anchor = labelSide > 0 ? "start" : "end";
+
+  const labelMarkup =
+    '<text class="' + labelClass + '" x="' + labelX + '" y="' + labelY + '" text-anchor="' + anchor + '">' +
+    milestone.name + "</text>";
+
+  return hitArea + shapeMarkup + labelMarkup;
 }
 
 // Teken de kaart opnieuw: achtergrond, landschap, pad, milestones
 // en de exacte positie van Frodo & Sam, gebaseerd op totalWalked.
+// Alles komt binnen één <g id="mapViewport"> te staan, zodat zoom/pan
+// simpelweg een transform op die ene groep is.
 function renderMap() {
   if (!journeyMapEl || milestones.length === 0) {
     return;
@@ -486,8 +626,6 @@ function renderMap() {
 
   const current = getCurrentMilestone();
 
-  // Voortgang als getal tussen 0 en 1 - dezelfde verhouding als het
-  // percentage, dus kaart en percentage lopen altijd exact gelijk op.
   const travelerT = Math.max(0, Math.min(1, totalWalked / TOTAL_DISTANCE));
   const travelerPoint = pathPosition(travelerT);
 
@@ -510,20 +648,164 @@ function renderMap() {
   });
 
   journeyMapEl.innerHTML =
+    '<g id="mapViewport">' +
     buildMapBackgroundMarkup() +
     buildTerrainMarkup() +
     '<polyline class="map-path-remaining" points="' + toPointsString(remainingPoints) + '"></polyline>' +
     '<polyline class="map-path-done" points="' + toPointsString(traveledPoints) + '"></polyline>' +
     nodesMarkup +
     '<circle class="map-traveler-ring" cx="' + travelerPoint.x + '" cy="' + travelerPoint.y + '" r="1.8"></circle>' +
-    '<circle class="map-traveler" cx="' + travelerPoint.x + '" cy="' + travelerPoint.y + '" r="1.6"></circle>';
+    '<circle class="map-traveler" cx="' + travelerPoint.x + '" cy="' + travelerPoint.y + '" r="1.6"></circle>' +
+    "</g>";
+
+  // De kaart is opnieuw opgebouwd, dus de <g> heeft nog geen transform.
+  // De huidige zoom/pan-stand opnieuw toepassen:
+  applyMapTransform();
 }
 
-// Tik/klik op een milestone-marker: toon naam, afstand en status
-// in het tooltip-paneel onder de kaart (betrouwbaarder op mobiel
-// dan een zwevende tooltip bovenop een schaalbare SVG).
+/* ---- Zoom & pan: alleen native SVG/JS, geen externe library ---- */
+
+function clampMapTransform() {
+  const minX = Math.min(0, MAP_VIEWBOX_WIDTH - MAP_VIEWBOX_WIDTH * mapScale);
+  const minY = Math.min(0, MAP_VIEWBOX_HEIGHT - MAP_VIEWBOX_HEIGHT * mapScale);
+  mapTranslateX = Math.max(minX, Math.min(0, mapTranslateX));
+  mapTranslateY = Math.max(minY, Math.min(0, mapTranslateY));
+}
+
+function updateZoomTierClass() {
+  if (!journeyMapEl) {
+    return;
+  }
+  let tier = 0;
+  if (mapScale >= MAP_ZOOM_TIER_2) {
+    tier = 2;
+  } else if (mapScale >= MAP_ZOOM_TIER_1) {
+    tier = 1;
+  }
+  journeyMapEl.classList.remove("tier-0", "tier-1", "tier-2");
+  journeyMapEl.classList.add("tier-" + tier);
+}
+
+function applyMapTransform() {
+  const viewport = document.getElementById("mapViewport");
+  if (!viewport) {
+    return;
+  }
+  viewport.setAttribute(
+    "transform",
+    "translate(" + mapTranslateX.toFixed(2) + "," + mapTranslateY.toFixed(2) + ") scale(" + mapScale.toFixed(2) + ")"
+  );
+  updateZoomTierClass();
+}
+
+// Zoom in/uit, met (px, py) als vast punt (in viewBox-coördinaten)
+// dat op het scherm blijft staan tijdens het zoomen.
+function zoomMapAt(px, py, newScale) {
+  const clampedScale = Math.max(MAP_MIN_SCALE, Math.min(MAP_MAX_SCALE, newScale));
+  const contentX = (px - mapTranslateX) / mapScale;
+  const contentY = (py - mapTranslateY) / mapScale;
+
+  mapScale = clampedScale;
+  mapTranslateX = px - contentX * mapScale;
+  mapTranslateY = py - contentY * mapScale;
+
+  clampMapTransform();
+  applyMapTransform();
+}
+
+function resetMapView() {
+  mapScale = 1;
+  mapTranslateX = 0;
+  mapTranslateY = 0;
+  applyMapTransform();
+}
+
+function clientToViewBoxPoint(clientX, clientY) {
+  const rect = journeyMapEl.getBoundingClientRect();
+  const scaleX = MAP_VIEWBOX_WIDTH / rect.width;
+  const scaleY = MAP_VIEWBOX_HEIGHT / rect.height;
+  return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+}
+
+function distanceBetweenTouches(touches) {
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
 if (journeyMapEl) {
+  let lastTouchX = 0;
+  let lastTouchY = 0;
+  let lastPinchDistance = 0;
+  let touchMoved = false;
+
+  journeyMapEl.addEventListener("touchstart", function (event) {
+    touchMoved = false;
+    if (mapHintEl) {
+      mapHintEl.classList.add("hidden");
+    }
+
+    if (event.touches.length === 1) {
+      lastTouchX = event.touches[0].clientX;
+      lastTouchY = event.touches[0].clientY;
+    } else if (event.touches.length === 2) {
+      lastPinchDistance = distanceBetweenTouches(event.touches);
+    }
+  }, { passive: true });
+
+  journeyMapEl.addEventListener("touchmove", function (event) {
+    if (event.touches.length === 2) {
+      // Pinch-to-zoom
+      event.preventDefault();
+      touchMoved = true;
+
+      const newDistance = distanceBetweenTouches(event.touches);
+      if (lastPinchDistance > 0) {
+        const midX = (event.touches[0].clientX + event.touches[1].clientX) / 2;
+        const midY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
+        const point = clientToViewBoxPoint(midX, midY);
+        const ratio = newDistance / lastPinchDistance;
+        zoomMapAt(point.x, point.y, mapScale * ratio);
+      }
+      lastPinchDistance = newDistance;
+    } else if (event.touches.length === 1) {
+      // Eén vinger: pannen (alleen als er al ingezoomd is, anders is
+      // er toch niets te verschuiven)
+      const touch = event.touches[0];
+      const dx = touch.clientX - lastTouchX;
+      const dy = touch.clientY - lastTouchY;
+
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        touchMoved = true;
+        event.preventDefault();
+
+        const rect = journeyMapEl.getBoundingClientRect();
+        const scaleX = MAP_VIEWBOX_WIDTH / rect.width;
+        const scaleY = MAP_VIEWBOX_HEIGHT / rect.height;
+
+        mapTranslateX += dx * scaleX;
+        mapTranslateY += dy * scaleY;
+        clampMapTransform();
+        applyMapTransform();
+
+        lastTouchX = touch.clientX;
+        lastTouchY = touch.clientY;
+      }
+    }
+  }, { passive: false });
+
+  journeyMapEl.addEventListener("touchend", function () {
+    lastPinchDistance = 0;
+  });
+
+  // Tik op een milestone-marker: toon naam, afstand en status in het
+  // tooltip-paneel onder de kaart. Alleen als het een echte tik was
+  // (geen sleepbeweging), zodat pannen geen tooltip opent.
   journeyMapEl.addEventListener("click", function (event) {
+    if (touchMoved) {
+      return;
+    }
+
     const target = event.target.closest("[data-milestone-id]");
     if (!target) {
       return;
@@ -545,6 +827,27 @@ if (journeyMapEl) {
       '<p class="map-tooltip-meta">' + milestone.km + " km &nbsp;·&nbsp; " + STATUS_LABELS[status] + "</p>";
   });
 }
+
+// Knoppen voor zoom in / uit / fit (voor desktop-muizen en als
+// betrouwbaar alternatief naast pinch-to-zoom op mobiel).
+if (mapZoomInButton) {
+  mapZoomInButton.addEventListener("click", function () {
+    zoomMapAt(MAP_VIEWBOX_WIDTH / 2, MAP_VIEWBOX_HEIGHT / 2, mapScale * 1.4);
+  });
+}
+
+if (mapZoomOutButton) {
+  mapZoomOutButton.addEventListener("click", function () {
+    zoomMapAt(MAP_VIEWBOX_WIDTH / 2, MAP_VIEWBOX_HEIGHT / 2, mapScale / 1.4);
+  });
+}
+
+if (mapZoomResetButton) {
+  mapZoomResetButton.addEventListener("click", function () {
+    resetMapView();
+  });
+}
+
 
 /* =========================================================
    ACHIEVEMENTS
@@ -750,6 +1053,11 @@ function renderAchievements() {
     return;
   }
 
+  if (achievementSummaryEl) {
+    achievementSummaryEl.textContent =
+      unlockedAchievementIds.length + " of " + ACHIEVEMENTS.length + " achievements unlocked";
+  }
+
   achievementListEl.innerHTML = "";
 
   ACHIEVEMENTS.forEach(function (achievement) {
@@ -881,6 +1189,7 @@ confirmResetButton.addEventListener("click", function () {
   unlockedAchievementIds = [];
   saveUnlockedAchievements();
 
+  resetMapView();
   updateDisplay();
   resetModal.classList.add("hidden");
 });
